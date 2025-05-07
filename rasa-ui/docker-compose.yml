@@ -1,0 +1,87 @@
+version: "3.8"
+
+services:
+  rasa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rasa
+    hostname: rasahost
+    ports:
+      - "5005:5005"
+    volumes:
+      - "./:/app/"
+      - "./config.yml:/app/config.yml"
+      - "./credentials.yml:/app/credentials.yml"
+      - "./endpoints.yml:/app/endpoints.yml"
+      - "./domain.yml:/app/domain.yml"
+      - "./index.html:/app/index.html"
+    command:
+      # Use the default CMD from the Dockerfile if you prefer,
+      # or override it here to train, e.g., [ "train" ]
+      # - train # uncomment for training new nlu and core model
+      # - nlu # uncomment for training new nlu model
+      - run
+      - --cors
+      - "*"
+      - --enable-api
+    networks:
+      - my_bridge
+
+  action_server:
+    restart: always
+    build:
+      context: ./actions/
+    # image: devmanenvision/rasa_action_server:latest
+    container_name: rasa_action_server
+    hostname: actionserverhost
+    ports:
+      - "5055:5055"
+    depends_on:
+      - rasa
+    volumes:
+      - ./actions:/app/actions
+      - attachments_volume:/app/actions/static/attachments
+    networks:
+      - my_bridge
+
+  action_server_static_sharing:
+      build:
+        context: ./actions/static
+        dockerfile: Dockerfile
+      container_name: flask_static_server
+      ports:
+        - "8000:8000"
+      volumes:
+        - ./actions/static/logs:/app/logs
+        - attachments_volume:/app/attachments:ro
+      environment:
+        - PYTHONUNBUFFERED=1
+        - GUNICORN_CMD_ARGS=--log-level=info
+      restart: unless-stopped
+      networks:
+        - my_bridge
+
+  # web_ui:
+  #   restart: always
+  #   build:
+  #     context: ./ui  # Build the web-ui container from the 'ui' directory
+  #   container_name: rasa-web-ui
+  #   hostname: webuihost
+  #   volumes:
+  #     - ./ui:/usr/share/nginx/html  # Mount the 'ui' folder to Nginx html directory
+  #   ports:
+  #     - "8082:80"  # Access web UI on localhost:8082
+  #   depends_on:
+  #     - action_server
+  #     - rasa
+  #   networks:
+      # - my_bridge
+
+networks:
+  my_bridge:
+    driver: bridge
+
+volumes:
+  attachments_volume:
+    driver: local
